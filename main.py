@@ -44,7 +44,7 @@ def encrypt_author_cipher(text):
                 global_char_idx += 1
                 idx = DIGITS_ROW.index(char)
                 dynamic_shift = (idx + global_char_idx) % 10
-                encoded_chars.append(NUM_MAP[dynamic_shift])
+                encoded_chars.append("2" + NUM_MAP[dynamic_shift])
                 
             elif lower_char in RU_ALPHABET:
                 global_char_idx += 1
@@ -61,7 +61,7 @@ def encrypt_author_cipher(text):
                     cipher_char = KB_ROW_RU[current_step].upper()
                     
                 last_ru_step = current_step
-                encoded_chars.append(cipher_char)
+                encoded_chars.append("1" + cipher_char)
                 
             elif any(lower_char in row for row in KEYBOARD_EN):
                 global_char_idx += 1
@@ -78,106 +78,124 @@ def encrypt_author_cipher(text):
                     target_y = 0
                     marker = "S"
                     
+                if char.isupper():
+                    marker = marker.lower()
+                    
                 row = KEYBOARD_EN[target_y]
                 center_char = row[x % len(row)]
                 left_char = row[(x - 1) % len(row)]
                 right_char = row[(x + 1) % len(row)]
                 
                 red_cross_block = f"{left_char}{center_char}{right_char}{marker}".upper()
-                encoded_chars.append(red_cross_block)
+                encoded_chars.append("4" + red_cross_block)
                 
             else:
-                encoded_chars.append(char)
+                encoded_chars.append("1" + char)
                 
         if encoded_chars:
-            encoded_words.append("XQ".join(encoded_chars))
-    return "XQX".join(encoded_words)
+            encoded_words.append("".join(encoded_chars))
+            
+    return "0".join(encoded_words)
 
 def decrypt_author_cipher(cipher_text):
     cipher_text = cipher_text.strip()
-    words = cipher_text.split('XQX')
+    words = cipher_text.split('0')
     decoded_words = []
     
     last_ru_step = -1
     global_char_idx = 0
     
     for word in words:
-        word = word.strip()
         if not word:
             continue
-        encoded_chars = word.split('XQ')
         decoded_chars = []
         
-        for enc_char in encoded_chars:
-            enc_char = enc_char.strip()
-            if not enc_char:
-                continue
+        i = 0
+        while i < len(word):
+            length_indicator = word[i]
+            i += 1
             
-            if enc_char in NUM_MAP:
+            if length_indicator == '2':
+                enc_char = word[i:i+2]
+                i += 2
+                
                 global_char_idx += 1
                 map_idx = NUM_MAP.index(enc_char)
                 orig_idx = (map_idx - global_char_idx) % 10
                 decoded_chars.append(DIGITS_ROW[orig_idx])
                 
-            elif enc_char.lower() in KB_ROW_RU and len(enc_char) == 1:
-                global_char_idx += 1
-                is_reverse = enc_char.islower()
-                lower_enc = enc_char.lower()
+            elif length_indicator == '1':
+                enc_char = word[i]
+                i += 1
                 
-                current_birthdays = get_mutated_list(global_char_idx)
-                birthday_multiplier = current_birthdays[global_char_idx % len(current_birthdays)]
-                
-                idx_found = None
-                for idx in range(1, len(RU_ALPHABET) + 1):
-                    math_val = (idx * birthday_multiplier) + global_char_idx
-                    current_step = math_val % len(KB_ROW_RU)
+                if enc_char.lower() in KB_ROW_RU:
+                    global_char_idx += 1
+                    is_reverse = enc_char.islower()
+                    lower_enc = enc_char.lower()
                     
-                    if last_ru_step != -1 and (current_step == last_ru_step or abs(current_step - last_ru_step) <= 2):
-                        expected_char = KB_ROW_RU[-(current_step + 1)]
+                    current_birthdays = get_mutated_list(global_char_idx)
+                    birthday_multiplier = current_birthdays[global_char_idx % len(current_birthdays)]
+                    
+                    idx_found = None
+                    for idx in range(1, len(RU_ALPHABET) + 1):
+                        math_val = (idx * birthday_multiplier) + global_char_idx
+                        current_step = math_val % len(KB_ROW_RU)
+                        
+                        if last_ru_step != -1 and (current_step == last_ru_step or abs(current_step - last_ru_step) <= 2):
+                            expected_char = KB_ROW_RU[-(current_step + 1)]
+                        else:
+                            expected_char = KB_ROW_RU[current_step]
+                            
+                        if expected_char == lower_enc and is_reverse == enc_char.islower():
+                            idx_found = idx
+                            last_ru_step = current_step
+                            break
+                            
+                    if idx_found is not None:
+                        decoded_chars.append(RU_ALPHABET[idx_found - 1])
                     else:
-                        expected_char = KB_ROW_RU[current_step]
-                        
-                    if expected_char == lower_enc and is_reverse == enc_char.islower():
-                        idx_found = idx
-                        last_ru_step = current_step
-                        break
-                        
-                if idx_found is not None:
-                    decoded_chars.append(RU_ALPHABET[idx_found - 1])
+                        decoded_chars.append(enc_char)
                 else:
                     decoded_chars.append(enc_char)
                     
-            elif len(enc_char) == 4:
+            elif length_indicator == '4':
+                enc_char = word[i:i+4]
+                i += 4
+                
                 global_char_idx += 1
                 lower_enc = enc_char.lower()
                 center_char = lower_enc[1]
-                marker = lower_enc[3]
+                marker = enc_char[3]
                 
                 coords = find_en_char_coords(center_char)
                 if coords:
                     y, x = coords
-                    if marker == "v":
+                    if marker.lower() == "v":
                         orig_y = 0
-                    elif marker == "n":
+                    elif marker.lower() == "n":
                         orig_y = 2
                     else:
                         orig_y = 1
-                    decoded_chars.append(KEYBOARD_EN[orig_y][x])
+                    
+                    result_char = KEYBOARD_EN[orig_y][x]
+                    if marker.islower():
+                        result_char = result_char.upper()
+                    decoded_chars.append(result_char)
                 else:
                     decoded_chars.append(enc_char)
             else:
-                decoded_chars.append(enc_char)
+                decoded_chars.append(length_indicator)
                 
         decoded_words.append("".join(decoded_chars))
     return " ".join(decoded_words)
 
 def main():
     print("=== Welcome to the Ultimate XQ-Cipher ===")
-    print("Algorithm: Red Cross & Birthday Mutation Matrix")
+    print("Algorithm: Red Cross & Birthday Mutation Matrix (No-XQ Edition)")
     print("Developed by rty31544-hash (Omen)\n")
     
     while True:
-        print("XQ")
+        print("Menu:")
         print("Press 1 — Encryption")
         print("Press 2 — Decryption")
         print("Press 3 — Exit program")
@@ -185,11 +203,11 @@ def main():
         choice = input("Your choice: ").strip()
         
         if choice == '1':
-            user_text = input("\n[XQ Encryption] Enter text: ")
+            user_text = input("\n[Encryption] Enter text: ")
             result = encrypt_author_cipher(user_text)
             print(f"Result: {result}")
         elif choice == '2':
-            user_cipher = input("\n[XQ Decryption] Enter cipher code: ")
+            user_cipher = input("\n[Decryption] Enter cipher code: ")
             result = decrypt_author_cipher(user_cipher)
             print(f"Result: {result}")
         elif choice == '3':
